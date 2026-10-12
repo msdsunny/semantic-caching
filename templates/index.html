@@ -1,0 +1,1944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Semantic Cache Chatbot | AWS Powered</title>
+    <meta name="description" content="Interactive semantic caching chatbot powered by Amazon Bedrock, S3 Vector Buckets, and AWS Lambda. Ask questions and observe cache HIT/MISS behavior in real time.">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+        /* ================================
+           DESIGN TOKENS
+        ================================ */
+        :root {
+            --bg-primary: #040d1a;
+            --bg-secondary: #071224;
+            --bg-card: rgba(10, 25, 50, 0.8);
+            --bg-input: rgba(6, 18, 38, 0.9);
+            --bg-glass: rgba(255, 255, 255, 0.03);
+            --border-subtle: rgba(56, 189, 248, 0.12);
+            --border-glow: rgba(56, 189, 248, 0.35);
+
+            --text-primary: #e2eeff;
+            --text-secondary: #8da4c8;
+            --text-muted: #4a6080;
+
+            --accent-cyan: #38bdf8;
+            --accent-cyan-dim: rgba(56, 189, 248, 0.15);
+            --accent-cyan-glow: rgba(56, 189, 248, 0.4);
+
+            --hit-color: #10b981;
+            --hit-dim: rgba(16, 185, 129, 0.12);
+            --hit-glow: rgba(16, 185, 129, 0.5);
+
+            --miss-color: #f97316;
+            --miss-dim: rgba(249, 115, 22, 0.12);
+            --miss-glow: rgba(249, 115, 22, 0.5);
+
+            --user-bubble: rgba(56, 189, 248, 0.1);
+            --ai-bubble: rgba(10, 25, 50, 0.9);
+
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 24px;
+
+            --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            --shadow-glow: 0 0 30px rgba(56, 189, 248, 0.15);
+        }
+
+        /* ================================
+           RESET & BASE
+        ================================ */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html { height: 100%; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* ================================
+           ANIMATED BACKGROUND
+        ================================ */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 800px 600px at 20% 10%, rgba(56, 189, 248, 0.05) 0%, transparent 60%),
+                radial-gradient(ellipse 600px 500px at 80% 80%, rgba(99, 102, 241, 0.04) 0%, transparent 60%),
+                radial-gradient(ellipse 400px 300px at 50% 50%, rgba(16, 185, 129, 0.03) 0%, transparent 60%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Grid overlay */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ================================
+           HEADER
+        ================================ */
+        .header {
+            position: relative;
+            z-index: 10;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-subtle);
+            background: rgba(4, 13, 26, 0.9);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            flex-shrink: 0;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+            flex-shrink: 0;
+        }
+
+        .header-title h1 {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+
+        .header-title p {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .header-badges {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .badge-bedrock {
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #10b981;
+        }
+
+        .badge-s3 {
+            background: rgba(56, 189, 248, 0.12);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            color: var(--accent-cyan);
+        }
+
+        .badge-lambda {
+            background: rgba(249, 115, 22, 0.12);
+            border: 1px solid rgba(249, 115, 22, 0.3);
+            color: #f97316;
+        }
+
+        /* Pulse dot */
+        .pulse-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse-ring 2s ease infinite;
+            display: inline-block;
+        }
+
+        @keyframes pulse-ring {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.3); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        /* ================================
+           STATS BAR
+        ================================ */
+        .stats-bar {
+            position: relative;
+            z-index: 10;
+            padding: 8px 24px;
+            display: flex;
+            gap: 24px;
+            align-items: center;
+            border-bottom: 1px solid var(--border-subtle);
+            background: rgba(4, 13, 26, 0.6);
+            backdrop-filter: blur(10px);
+            flex-shrink: 0;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .stat-item.hits .stat-value { color: var(--hit-color); }
+        .stat-item.misses .stat-value { color: var(--miss-color); }
+        .stat-item.total .stat-value { color: var(--accent-cyan); }
+        .stat-item.ratio .stat-value { color: #818cf8; }
+
+        .stats-divider {
+            width: 1px;
+            height: 16px;
+            background: var(--border-subtle);
+        }
+
+        /* ================================
+           LAYOUT
+        ================================ */
+        .app-layout {
+            position: relative;
+            z-index: 5;
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            gap: 0;
+        }
+
+        /* ================================
+           SIDEBAR (ARCHITECTURE)
+        ================================ */
+        .sidebar {
+            width: 300px;
+            flex-shrink: 0;
+            border-right: 1px solid var(--border-subtle);
+            background: rgba(4, 13, 26, 0.6);
+            backdrop-filter: blur(10px);
+            overflow-y: auto;
+            padding: 20px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .sidebar::-webkit-scrollbar { width: 4px; }
+        .sidebar::-webkit-scrollbar-track { background: transparent; }
+        .sidebar::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 2px; }
+
+        .sidebar-section-title {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        /* Flow diagram */
+        .flow-diagram {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+
+        .flow-node {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-glass);
+            transition: var(--transition);
+            cursor: default;
+            position: relative;
+        }
+
+        .flow-node:hover {
+            border-color: var(--border-glow);
+            background: var(--accent-cyan-dim);
+        }
+
+        .flow-node-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .flow-node-text strong {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .flow-node-text span {
+            font-size: 10px;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .flow-arrow {
+            display: flex;
+            justify-content: center;
+            padding: 3px 0;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .flow-split {
+            display: flex;
+            gap: 6px;
+            padding: 4px 0;
+        }
+
+        .flow-split-node {
+            flex: 1;
+            padding: 8px 8px;
+            border-radius: var(--radius-sm);
+            border: 1px solid;
+            font-size: 10px;
+            text-align: center;
+        }
+
+        .flow-split-node.hit {
+            border-color: rgba(16, 185, 129, 0.3);
+            background: rgba(16, 185, 129, 0.07);
+            color: var(--hit-color);
+        }
+
+        .flow-split-node.miss {
+            border-color: rgba(249, 115, 22, 0.3);
+            background: rgba(249, 115, 22, 0.07);
+            color: var(--miss-color);
+        }
+
+        .flow-split-node strong {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            margin-bottom: 3px;
+        }
+
+        /* Info cards */
+        .info-card {
+            padding: 12px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-glass);
+        }
+
+        .info-card-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .info-card-body {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .code-pill {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            padding: 2px 6px;
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 4px;
+            color: var(--accent-cyan);
+            display: inline-block;
+            margin: 1px 0;
+        }
+
+        /* Threshold meter */
+        .threshold-meter {
+            margin-top: 8px;
+        }
+
+        .threshold-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .threshold-track {
+            height: 6px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .threshold-fill {
+            height: 100%;
+            width: 90%;
+            background: linear-gradient(90deg, #38bdf8, #10b981);
+            border-radius: 3px;
+            position: relative;
+        }
+
+        .threshold-marker {
+            position: absolute;
+            right: 0;
+            top: -3px;
+            width: 2px;
+            height: 12px;
+            background: white;
+            border-radius: 1px;
+        }
+
+        /* ================================
+           MAIN CHAT AREA
+        ================================ */
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ================================
+           MESSAGES
+        ================================ */
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            scroll-behavior: smooth;
+        }
+
+        .messages-container::-webkit-scrollbar { width: 5px; }
+        .messages-container::-webkit-scrollbar-track { background: transparent; }
+        .messages-container::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 3px; }
+        .messages-container::-webkit-scrollbar-thumb:hover { background: var(--border-glow); }
+
+        /* Welcome state */
+        .welcome-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            gap: 16px;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .welcome-icon {
+            width: 72px;
+            height: 72px;
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(129, 140, 248, 0.2) 100%);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            animation: float 4s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .welcome-state h2 {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.03em;
+        }
+
+        .welcome-state p {
+            font-size: 14px;
+            color: var(--text-secondary);
+            max-width: 400px;
+            line-height: 1.6;
+        }
+
+        .example-prompts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            max-width: 480px;
+        }
+
+        .example-prompt {
+            padding: 8px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-glass);
+            font-size: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .example-prompt:hover {
+            border-color: var(--border-glow);
+            color: var(--accent-cyan);
+            background: var(--accent-cyan-dim);
+            transform: translateY(-1px);
+        }
+
+        /* Message rows */
+        .message-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            animation: slideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message-row.user { flex-direction: row-reverse; }
+
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .avatar-user {
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
+        }
+
+        .avatar-ai {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(56, 189, 248, 0.3));
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .message-content {
+            max-width: 68%;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .message-row.user .message-content { align-items: flex-end; }
+
+        .message-bubble {
+            padding: 12px 16px;
+            border-radius: var(--radius-lg);
+            font-size: 14px;
+            line-height: 1.65;
+            word-break: break-word;
+        }
+
+        .message-bubble.user {
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(129, 140, 248, 0.15));
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            color: var(--text-primary);
+            border-bottom-right-radius: var(--radius-sm);
+        }
+
+        .message-bubble.ai {
+            background: var(--ai-bubble);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            border-bottom-left-radius: var(--radius-sm);
+        }
+
+        .message-bubble.ai.hit {
+            border-color: rgba(16, 185, 129, 0.3);
+            background: rgba(4, 13, 26, 0.95);
+        }
+
+        .message-bubble.ai.miss {
+            border-color: rgba(249, 115, 22, 0.2);
+        }
+
+        /* Cache badge on message */
+        .cache-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .cache-badge.hit {
+            background: var(--hit-dim);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: var(--hit-color);
+        }
+
+        .cache-badge.miss {
+            background: var(--miss-dim);
+            border: 1px solid rgba(249, 115, 22, 0.3);
+            color: var(--miss-color);
+        }
+
+        .cache-badge-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .message-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 4px;
+        }
+
+        /* Markdown content styling */
+        .ai-markdown h1, .ai-markdown h2, .ai-markdown h3 {
+            color: var(--accent-cyan);
+            margin: 12px 0 6px;
+            font-weight: 600;
+        }
+        .ai-markdown h1 { font-size: 16px; }
+        .ai-markdown h2 { font-size: 14px; }
+        .ai-markdown h3 { font-size: 13px; }
+        .ai-markdown p { margin: 6px 0; }
+        .ai-markdown code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            background: rgba(56, 189, 248, 0.08);
+            border: 1px solid rgba(56, 189, 248, 0.15);
+            padding: 1px 5px;
+            border-radius: 4px;
+            color: var(--accent-cyan);
+        }
+        .ai-markdown pre {
+            background: rgba(4, 13, 26, 0.8);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+        .ai-markdown pre code {
+            background: none;
+            border: none;
+            padding: 0;
+            color: var(--text-primary);
+        }
+        .ai-markdown ul, .ai-markdown ol { padding-left: 20px; margin: 6px 0; }
+        .ai-markdown li { margin: 3px 0; }
+        .ai-markdown a { color: var(--accent-cyan); }
+        .ai-markdown strong { color: var(--text-primary); font-weight: 600; }
+        .ai-markdown blockquote {
+            border-left: 3px solid var(--accent-cyan);
+            padding-left: 12px;
+            color: var(--text-secondary);
+            margin: 8px 0;
+        }
+
+        /* Typing indicator */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 0;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            padding: 10px 14px;
+            background: var(--ai-bubble);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            border-bottom-left-radius: var(--radius-sm);
+        }
+
+        .typing-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            animation: typing-bounce 1.2s ease infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing-bounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+            30% { transform: translateY(-5px); opacity: 1; }
+        }
+
+        .typing-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* ================================
+           INPUT AREA
+        ================================ */
+        .input-area {
+            padding: 16px 28px 20px;
+            border-top: 1px solid var(--border-subtle);
+            background: rgba(4, 13, 26, 0.9);
+            backdrop-filter: blur(20px);
+            flex-shrink: 0;
+        }
+
+        .input-wrapper {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-xl);
+            padding: 10px 12px 10px 18px;
+            transition: var(--transition);
+        }
+
+        .input-wrapper:focus-within {
+            border-color: var(--border-glow);
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.08), 0 0 20px rgba(56, 189, 248, 0.12);
+        }
+
+        #prompt {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: none;
+            max-height: 120px;
+            min-height: 24px;
+            overflow-y: auto;
+        }
+
+        #prompt::placeholder { color: var(--text-muted); }
+
+        #prompt::-webkit-scrollbar { width: 3px; }
+        #prompt::-webkit-scrollbar-track { background: transparent; }
+        #prompt::-webkit-scrollbar-thumb { background: var(--border-subtle); }
+
+        #askBtn {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            background: linear-gradient(135deg, #38bdf8, #818cf8);
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+            transition: var(--transition);
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.3);
+        }
+
+        #askBtn:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 0 24px rgba(56, 189, 248, 0.5);
+        }
+
+        #askBtn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #askBtn.loading {
+            animation: btn-spin 0.9s linear infinite;
+        }
+
+        @keyframes btn-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .input-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: 8px;
+        }
+
+        .input-hint kbd {
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-size: 10px;
+        }
+
+        /* ================================
+           TOAST NOTIFICATIONS
+        ================================ */
+        .toast-container {
+            position: fixed;
+            bottom: 90px;
+            right: 20px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+        }
+
+        .toast {
+            padding: 10px 14px;
+            border-radius: var(--radius-md);
+            font-size: 12px;
+            font-weight: 500;
+            animation: toast-in 0.3s ease, toast-out 0.3s ease 2.7s forwards;
+            pointer-events: all;
+        }
+
+        .toast.error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171;
+        }
+
+        @keyframes toast-in {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes toast-out {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(20px); }
+        }
+
+        /* ================================
+           SCROLLBAR GLOW EFFECT
+        ================================ */
+        .hit-glow { box-shadow: 0 0 20px rgba(16, 185, 129, 0.2); }
+        .miss-glow { box-shadow: 0 0 20px rgba(249, 115, 22, 0.15); }
+
+        /* ================================
+           INFRA BUTTON (HEADER)
+        ================================ */
+        .infra-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 1px solid rgba(129, 140, 248, 0.35);
+            background: rgba(129, 140, 248, 0.1);
+            color: #818cf8;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            font-family: 'Inter', sans-serif;
+            letter-spacing: 0.03em;
+        }
+        .infra-btn:hover {
+            background: rgba(129, 140, 248, 0.2);
+            border-color: rgba(129, 140, 248, 0.6);
+            box-shadow: 0 0 16px rgba(129, 140, 248, 0.25);
+            transform: translateY(-1px);
+        }
+        .infra-btn .infra-icon { font-size: 14px; }
+
+
+
+        /* ================================
+           INFRA MODAL OVERLAY
+        ================================ */
+        .infra-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(4, 13, 26, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 200;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .infra-overlay.open {
+            opacity: 1;
+            pointer-events: all;
+        }
+        .infra-panel {
+            width: 100%;
+            max-width: 760px;
+            background: #071224;
+            border: 1px solid rgba(129, 140, 248, 0.25);
+            border-bottom: none;
+            border-radius: 20px 20px 0 0;
+            padding: 24px;
+            transform: translateY(100%);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-height: 85vh;
+        }
+        .infra-overlay.open .infra-panel {
+            transform: translateY(0);
+        }
+        .infra-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .infra-panel-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .infra-panel-title span {
+            font-size: 20px;
+        }
+        .infra-close-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-glass);
+            color: var(--text-muted);
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+        .infra-close-btn:hover {
+            border-color: var(--border-glow);
+            color: var(--text-primary);
+        }
+
+        /* Action buttons row */
+        .infra-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+        .infra-action-btn {
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            border: 1px solid;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+        .infra-action-btn .btn-icon { font-size: 22px; }
+        .infra-action-btn .btn-label { font-size: 12px; }
+        .infra-action-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        .infra-action-btn:not(:disabled):hover { transform: translateY(-2px); }
+
+        .btn-setup {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: rgba(16, 185, 129, 0.35);
+            color: #10b981;
+        }
+        .btn-setup:not(:disabled):hover {
+            background: rgba(16, 185, 129, 0.2);
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
+        }
+        .btn-teardown {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.35);
+            color: #f87171;
+        }
+        .btn-teardown:not(:disabled):hover {
+            background: rgba(239, 68, 68, 0.2);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.25);
+        }
+        .btn-update {
+            background: rgba(129, 140, 248, 0.1);
+            border-color: rgba(129, 140, 248, 0.35);
+            color: #818cf8;
+        }
+        .btn-update:not(:disabled):hover {
+            background: rgba(129, 140, 248, 0.2);
+            box-shadow: 0 0 20px rgba(129, 140, 248, 0.25);
+        }
+
+        /* Terminal output */
+        .infra-terminal {
+            background: #020c1b;
+            border: 1px solid rgba(56, 189, 248, 0.1);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            line-height: 1.7;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 180px;
+            max-height: 340px;
+            color: #64748b;
+            scroll-behavior: smooth;
+        }
+        .infra-terminal::-webkit-scrollbar { width: 4px; }
+        .infra-terminal::-webkit-scrollbar-track { background: transparent; }
+        .infra-terminal::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.2); border-radius: 2px; }
+
+        .term-line { display: block; white-space: pre-wrap; word-break: break-all; }
+        .term-line.ok     { color: #10b981; }
+        .term-line.skip   { color: #f59e0b; }
+        .term-line.wait   { color: #38bdf8; }
+        .term-line.del    { color: #f87171; }
+        .term-line.patch  { color: #818cf8; }
+        .term-line.err    { color: #ef4444; }
+        .term-line.header { color: #e2eeff; font-weight: bold; }
+        .term-line.done   { color: #10b981; font-weight: bold; }
+        .term-placeholder { color: #1e3a5f; font-style: italic; }
+
+        /* Status banner */
+        .infra-status-banner {
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            font-weight: 600;
+            display: none;
+            align-items: center;
+            gap: 8px;
+        }
+
+
+        .infra-status-banner.show { display: flex; }
+        .infra-status-banner.success {
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #10b981;
+        }
+        .infra-status-banner.failure {
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171;
+        }
+        .infra-status-banner.running {
+            background: rgba(56, 189, 248, 0.08);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            color: var(--accent-cyan);
+        }
+        .spin-inline {
+            display: inline-block;
+            animation: btn-spin 1s linear infinite;
+        }
+        @keyframes btn-spin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
+
+        /* ================================
+           RESPONSIVE
+        ================================ */
+        @media (max-width: 900px) {
+            .sidebar { display: none; }
+            .infra-actions { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 600px) {
+            .header { padding: 12px 16px; }
+            .header-badges { display: none; }
+            .messages-container { padding: 16px; }
+            .input-area { padding: 12px 16px 16px; }
+            .message-content { max-width: 85%; }
+            .infra-actions { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ================================
+     HEADER
+================================ -->
+<header class="header">
+    <div class="header-left">
+        <div class="logo-icon">🧠</div>
+        <div class="header-title">
+            <h1>Semantic Cache Chatbot</h1>
+            <p>Powered by Amazon Bedrock · S3 Vectors · Lambda</p>
+        </div>
+    </div>
+    <div class="header-badges">
+        <span class="badge badge-bedrock"><span class="pulse-dot"></span> Bedrock LLM</span>
+        <span class="badge badge-s3">S3 Vectors</span>
+        <span class="badge badge-lambda">λ Lambda</span>
+        <span class="badge badge-s3" id="headerApiBadge" onclick="copyApiUrl()" style="cursor:pointer;" title="Click to copy API Gateway URL">🌐 API Gateway</span>
+        <button class="infra-btn" id="infraOpenBtn" onclick="openInfraPanel()" title="Infrastructure Control Panel">
+            <span class="infra-icon">⚙️</span> Infrastructure
+        </button>
+    </div>
+</header>
+
+<!-- ================================
+     STATS BAR
+================================ -->
+<div class="stats-bar" id="statsBar">
+    <div class="stat-item total">
+        <span>Total Queries:</span>
+        <span class="stat-value" id="statTotal">0</span>
+    </div>
+    <div class="stats-divider"></div>
+    <div class="stat-item hits">
+        <span>⚡ Cache Hits:</span>
+        <span class="stat-value" id="statHits">0</span>
+    </div>
+    <div class="stats-divider"></div>
+    <div class="stat-item misses">
+        <span>🔥 Cache Misses:</span>
+        <span class="stat-value" id="statMisses">0</span>
+    </div>
+    <div class="stats-divider"></div>
+    <div class="stat-item ratio">
+        <span>Hit Rate:</span>
+        <span class="stat-value" id="statRatio">—</span>
+    </div>
+</div>
+
+<!-- ================================
+     APP LAYOUT
+================================ -->
+<div class="app-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-section-title">Architecture Flow</div>
+
+        <div class="flow-diagram">
+            <div class="flow-node">
+                <div class="flow-node-icon">🌐</div>
+                <div class="flow-node-text">
+                    <strong>User Query</strong>
+                    <span>Flask app receives prompt</span>
+                </div>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-node">
+                <div class="flow-node-icon">🔗</div>
+                <div class="flow-node-text">
+                    <strong>API Gateway</strong>
+                    <span>POST /chat — HTTP API</span>
+                </div>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-node">
+                <div class="flow-node-icon">λ</div>
+                <div class="flow-node-text">
+                    <strong>Lambda Function</strong>
+                    <span>semantic-cache-handler</span>
+                </div>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-node">
+                <div class="flow-node-icon">🔢</div>
+                <div class="flow-node-text">
+                    <strong>Titan Embeddings v2</strong>
+                    <span>Generate 1024-dim vector</span>
+                </div>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-node">
+                <div class="flow-node-icon">🪣</div>
+                <div class="flow-node-text">
+                    <strong>S3 Vector Index</strong>
+                    <span>Query top-K neighbors (cosine)</span>
+                </div>
+            </div>
+            <div class="flow-arrow">↓</div>
+            <div class="flow-split">
+                <div class="flow-split-node hit">
+                    <strong>⚡ HIT</strong>
+                    Return cached answer
+                </div>
+                <div class="flow-split-node miss">
+                    <strong>🔥 MISS</strong>
+                    Invoke Nova Pro LLM
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-section-title">Configuration</div>
+
+        <div class="info-card">
+            <div class="info-card-title">⚙️ Lambda & API Settings</div>
+            <div class="info-card-body">
+                <div style="margin-bottom:4px;">API Gateway Endpoint:</div>
+                <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;">
+                    <div style="display:flex; align-items:center; gap:4px;">
+                        <input type="text" id="inputApiGatewayUrl" placeholder="https://...execute-api.us-east-1.amazonaws.com/chat" style="background: rgba(4, 13, 26, 0.9); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 5px 8px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 10px; flex: 1; outline: none;">
+                        <button onclick="copyApiUrl()" style="background:none; border:none; color:var(--accent-cyan); cursor:pointer; font-size:13px;" title="Copy API Gateway URL">📋</button>
+                    </div>
+                    <button id="btnSaveApiUrl" onclick="saveApiGatewayUrl()" style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: var(--radius-sm); color: var(--accent-cyan); font-size: 11px; font-weight: 600; padding: 5px 8px; cursor: pointer; transition: var(--transition);">💾 Save Endpoint URL</button>
+                    <div id="saveApiStatus" style="font-size: 10px; min-height: 12px; text-align: center;"></div>
+                </div>
+                <div style="margin-bottom:4px;">Embedding Model:</div>
+                <span class="code-pill">amazon.titan-embed-text-v2:0</span>
+                <div style="margin: 8px 0 4px;">LLM Model:</div>
+                <span class="code-pill">amazon.nova-pro-v1:0</span>
+                <div style="margin: 8px 0 4px;">Vector Bucket:</div>
+                <span class="code-pill">semantic-cache-app</span>
+                <div style="margin: 8px 0 4px;">Vector Index:</div>
+                <span class="code-pill">cache-index</span>
+                <div style="margin: 8px 0 4px;">Distance Metric:</div>
+                <span class="code-pill">Cosine</span>
+            </div>
+        </div>
+
+        <div class="info-card">
+            <div class="info-card-title">📐 Similarity Threshold</div>
+            <div class="info-card-body">
+                Cosine similarity must be ≥ <strong id="thresholdPctText" style="color: var(--hit-color);">75%</strong>
+                (distance ≤ <strong id="thresholdDistText" style="color: var(--text-primary);">0.25</strong>) to trigger a cache HIT.
+
+                <div style="margin-top: 10px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <input
+                            type="range"
+                            id="thresholdSlider"
+                            min="10" max="99" step="1" value="75"
+                            style="flex: 1; accent-color: var(--hit-color); cursor: pointer;"
+                            oninput="onSliderInput(this.value)"
+                        >
+                        <span id="thresholdSliderVal" style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: var(--hit-color); min-width: 38px; text-align: right;">75%</span>
+                    </div>
+                    <button
+                        id="thresholdApplyBtn"
+                        onclick="applyThreshold()"
+                        style="width: 100%; padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1); color: #10b981; font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; cursor: pointer; transition: var(--transition);"
+                    >⚡ Apply to Lambda</button>
+                    <div id="thresholdStatus" style="font-size: 10px; color: var(--text-muted); margin-top: 4px; min-height: 14px; text-align: center;">Loading current value…</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-card">
+            <div class="info-card-title">💡 Try This</div>
+            <div class="info-card-body">
+                Ask the same question in different ways to see semantic caching in action:<br><br>
+                1. <em>"What is the pricing?"</em><br>
+                2. <em>"How much does it cost?"</em><br><br>
+                The second query should return a <strong style="color: var(--hit-color);">CACHE HIT</strong> because their embeddings are semantically similar.
+            </div>
+        </div>
+    </aside>
+
+    <!-- CHAT AREA -->
+    <main class="chat-area">
+        <div class="messages-container" id="messagesContainer">
+            <!-- Welcome State -->
+            <div class="welcome-state" id="welcomeState">
+                <div class="welcome-icon">🧠</div>
+                <h2>Semantic Cache in Action</h2>
+                <p>Ask questions and watch the system intelligently cache responses using Amazon S3 Vector Buckets and Bedrock embeddings.</p>
+                <div class="example-prompts">
+                    <div class="example-prompt" onclick="useExample('What is the pricing for this service?')">What is the pricing?</div>
+                    <div class="example-prompt" onclick="useExample('How much does it cost?')">How much does it cost?</div>
+                    <div class="example-prompt" onclick="useExample('Explain how machine learning works')">Explain machine learning</div>
+                    <div class="example-prompt" onclick="useExample('What are the best practices for cloud security?')">Cloud security best practices</div>
+                    <div class="example-prompt" onclick="useExample('How do I get started with AWS Lambda?')">Getting started with Lambda</div>
+                    <div class="example-prompt" onclick="useExample('Tell me about semantic search')">About semantic search</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- INPUT -->
+        <div class="input-area">
+            <div class="input-wrapper">
+                <textarea
+                    id="prompt"
+                    placeholder="Ask anything — semantic caching will remember similar queries…"
+                    rows="1"
+                    maxlength="2000"
+                    aria-label="Chat prompt input"
+                ></textarea>
+                <button id="askBtn" onclick="sendMessage()" aria-label="Send message" title="Send (Enter)">
+                    ➤
+                </button>
+            </div>
+            <div class="input-hint">Press <kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for new line</div>
+        </div>
+    </main>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+    // ================================
+    // STATE
+    // ================================
+    const state = {
+        total: 0,
+        hits: 0,
+        misses: 0,
+        isLoading: false,
+        apiGatewayUrl: '',
+    };
+
+    async function loadApiConfig() {
+        try {
+            const res = await fetch('/api/config');
+            const data = await res.json();
+            if (data.api_gateway_url) {
+                state.apiGatewayUrl = data.api_gateway_url;
+                const el = document.getElementById('inputApiGatewayUrl');
+                if (el) el.value = data.api_gateway_url;
+            }
+        } catch(e) {}
+    }
+
+    async function saveApiGatewayUrl() {
+        const input = document.getElementById('inputApiGatewayUrl');
+        const btn = document.getElementById('btnSaveApiUrl');
+        const status = document.getElementById('saveApiStatus');
+        const val = input.value.trim();
+
+        if (!val) {
+            showToast('Please enter a valid API Gateway URL', 'error');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = '↻ Saving...';
+        status.style.color = 'var(--text-muted)';
+        status.textContent = 'Updating endpoint...';
+
+        try {
+            const res = await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_gateway_url: val })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+
+            state.apiGatewayUrl = data.api_gateway_url;
+            input.value = data.api_gateway_url;
+            status.style.color = 'var(--hit-color)';
+            status.textContent = '✓ Endpoint updated!';
+            showToast('✓ API Gateway URL updated successfully!');
+        } catch(e) {
+            status.style.color = '#f87171';
+            status.textContent = '✗ ' + e.message;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '💾 Save Endpoint URL';
+        }
+    }
+
+    function copyApiUrl() {
+        const input = document.getElementById('inputApiGatewayUrl');
+        const val = input ? input.value : state.apiGatewayUrl;
+        if (!val) return;
+        navigator.clipboard.writeText(val);
+        showToast('📋 Copied API Gateway URL to clipboard!');
+    }
+
+    // ================================
+    // SIMILARITY THRESHOLD CONTROL
+    // ================================
+    function renderThreshold(val) {
+        const pct = Math.round(val * 100);
+        const dist = (1.0 - val).toFixed(2);
+        const pctText = document.getElementById('thresholdPctText');
+        const distText = document.getElementById('thresholdDistText');
+        const slider = document.getElementById('thresholdSlider');
+        const sliderVal = document.getElementById('thresholdSliderVal');
+
+        if (pctText) pctText.textContent = pct + '%';
+        if (distText) distText.textContent = dist;
+        if (slider) slider.value = pct;
+        if (sliderVal) sliderVal.textContent = pct + '%';
+    }
+
+    function onSliderInput(pct) {
+        const val = parseInt(pct, 10);
+        const sliderVal = document.getElementById('thresholdSliderVal');
+        const pctText = document.getElementById('thresholdPctText');
+        const distText = document.getElementById('thresholdDistText');
+
+        if (sliderVal) sliderVal.textContent = val + '%';
+        if (pctText) pctText.textContent = val + '%';
+        if (distText) distText.textContent = (1.0 - val / 100).toFixed(2);
+    }
+
+    async function loadThreshold() {
+        const statusEl = document.getElementById('thresholdStatus');
+        try {
+            const res = await fetch('/lambda/threshold');
+            const data = await res.json();
+            if (data.threshold !== undefined) {
+                renderThreshold(data.threshold);
+                if (statusEl) {
+                    statusEl.style.color = 'var(--hit-color)';
+                    statusEl.textContent = `✓ Loaded from Lambda (${data.function})`;
+                }
+            }
+        } catch (e) {
+            if (statusEl) {
+                statusEl.style.color = 'var(--text-muted)';
+                statusEl.textContent = 'Default: 75%';
+            }
+        }
+    }
+
+    async function applyThreshold() {
+        const pct = parseInt(document.getElementById('thresholdSlider').value, 10);
+        const val = pct / 100;
+        const btn = document.getElementById('thresholdApplyBtn');
+        const statusEl = document.getElementById('thresholdStatus');
+
+        btn.disabled = true;
+        btn.textContent = '↻ Applying…';
+        statusEl.style.color = 'var(--text-muted)';
+        statusEl.textContent = 'Updating Lambda environment variable…';
+
+        try {
+            const res = await fetch('/lambda/threshold', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ threshold: val }),
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+
+            renderThreshold(data.threshold);
+            statusEl.style.color = 'var(--hit-color)';
+            statusEl.textContent = `✓ Updated to ${pct}% — takes effect live!`;
+            showToast(`✓ Similarity threshold updated to ${pct}%!`);
+        } catch (e) {
+            statusEl.style.color = '#f87171';
+            statusEl.textContent = '✗ ' + e.message;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '⚡ Apply to Lambda';
+        }
+    }
+
+    loadApiConfig();
+    loadThreshold();
+
+    // ================================
+    // MARKED CONFIG
+    // ================================
+    marked.setOptions({ breaks: true, gfm: true });
+
+    // ================================
+    // AUTO-RESIZE TEXTAREA
+    // ================================
+    const promptEl = document.getElementById('prompt');
+    promptEl.addEventListener('input', () => {
+        promptEl.style.height = 'auto';
+        promptEl.style.height = Math.min(promptEl.scrollHeight, 120) + 'px';
+    });
+
+    promptEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    // ================================
+    // EXAMPLE PROMPTS
+    // ================================
+    function useExample(text) {
+        promptEl.value = text;
+        promptEl.style.height = 'auto';
+        promptEl.style.height = Math.min(promptEl.scrollHeight, 120) + 'px';
+        promptEl.focus();
+    }
+
+    // ================================
+    // STATS UPDATE
+    // ================================
+    function updateStats() {
+        document.getElementById('statTotal').textContent = state.total;
+        document.getElementById('statHits').textContent = state.hits;
+        document.getElementById('statMisses').textContent = state.misses;
+        const rate = state.total > 0
+            ? Math.round((state.hits / state.total) * 100) + '%'
+            : '—';
+        document.getElementById('statRatio').textContent = rate;
+    }
+
+    // ================================
+    // TOAST
+    // ================================
+    function showToast(message, type = 'error') {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 3100);
+    }
+
+    // ================================
+    // ADD MESSAGE TO UI
+    // ================================
+    function addUserMessage(text) {
+        const container = document.getElementById('messagesContainer');
+
+        // Remove welcome state on first message
+        const welcome = document.getElementById('welcomeState');
+        if (welcome) welcome.remove();
+
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        const row = document.createElement('div');
+        row.className = 'message-row user';
+        row.innerHTML = `
+            <div class="avatar avatar-user">👤</div>
+            <div class="message-content">
+                <div class="message-bubble user">${escapeHtml(text)}</div>
+                <div class="message-meta">${time}</div>
+            </div>
+        `;
+        container.appendChild(row);
+        scrollToBottom();
+        return row;
+    }
+
+    function addTypingIndicator() {
+        const container = document.getElementById('messagesContainer');
+        const row = document.createElement('div');
+        row.className = 'message-row';
+        row.id = 'typingIndicator';
+        row.innerHTML = `
+            <div class="avatar avatar-ai">🤖</div>
+            <div class="typing-indicator">
+                <div class="typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+                <span class="typing-label">⚡ Checking semantic cache…</span>
+            </div>
+        `;
+        container.appendChild(row);
+        scrollToBottom();
+    }
+
+    function removeTypingIndicator() {
+        const el = document.getElementById('typingIndicator');
+        if (el) el.remove();
+    }
+
+    function addAiMessage(text, cacheStatus) {
+        const container = document.getElementById('messagesContainer');
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        const isHit = cacheStatus === 'HIT';
+        const isMiss = cacheStatus === 'MISS';
+        const bubbleClass = isHit ? 'hit' : isMiss ? 'miss' : '';
+
+        const badgeHtml = (isHit || isMiss) ? `
+            <span class="cache-badge ${isHit ? 'hit' : 'miss'}">
+                <span class="cache-badge-dot"></span>
+                ${isHit ? '⚡ Cache HIT' : '🔥 Cache MISS'}
+            </span>
+        ` : '';
+
+        const row = document.createElement('div');
+        row.className = 'message-row';
+        row.innerHTML = `
+            <div class="avatar avatar-ai">🤖</div>
+            <div class="message-content">
+                <div class="message-bubble ai ${bubbleClass} ${isHit ? 'hit-glow' : ''} ai-markdown">
+                    ${marked.parse(text)}
+                </div>
+                <div class="message-meta">
+                    ${badgeHtml}
+                    <span>${time}</span>
+                </div>
+            </div>
+        `;
+        container.appendChild(row);
+        scrollToBottom();
+    }
+
+    // ================================
+    // MAIN SEND FUNCTION
+    // ================================
+    async function sendMessage() {
+        if (state.isLoading) return;
+
+        const text = promptEl.value.trim();
+        if (!text) return;
+
+        state.isLoading = true;
+        promptEl.value = '';
+        promptEl.style.height = 'auto';
+
+        const btn = document.getElementById('askBtn');
+        btn.disabled = true;
+        btn.classList.add('loading');
+        btn.textContent = '↻';
+
+        addUserMessage(text);
+        addTypingIndicator();
+
+        try {
+            const res = await fetch('/ask', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: text }),
+            });
+
+            const data = await res.json();
+            removeTypingIndicator();
+
+            if (data.error) {
+                showToast('⚠ ' + data.error);
+                addAiMessage('*Error:* ' + data.error, 'UNKNOWN');
+                return;
+            }
+
+            // Update stats
+            state.total++;
+            if (data.cache_status === 'HIT') state.hits++;
+            else if (data.cache_status === 'MISS') state.misses++;
+            updateStats();
+
+            addAiMessage(data.answer || '*No response received.*', data.cache_status);
+
+        } catch (err) {
+            removeTypingIndicator();
+            showToast('⚠ Connection error. Is the API Gateway URL configured?');
+            addAiMessage('*Could not reach the API. Please check that the API Gateway URL is configured in `app.py`.*', 'UNKNOWN');
+        } finally {
+            state.isLoading = false;
+            btn.disabled = false;
+            btn.classList.remove('loading');
+            btn.textContent = '➤';
+        }
+    }
+
+    // ================================
+    // HELPERS
+    // ================================
+    function scrollToBottom() {
+        const container = document.getElementById('messagesContainer');
+        setTimeout(() => {
+            container.scrollTop = container.scrollHeight;
+        }, 50);
+    }
+
+    function escapeHtml(text) {
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+</script>
+
+<!-- ================================
+     INFRASTRUCTURE CONTROL PANEL
+================================ -->
+<div class="infra-overlay" id="infraOverlay" onclick="handleOverlayClick(event)">
+    <div class="infra-panel" id="infraPanel">
+
+        <!-- Header -->
+        <div class="infra-panel-header">
+            <div class="infra-panel-title">
+                <span>⚙️</span>
+                Infrastructure Control Panel
+            </div>
+            <button class="infra-close-btn" onclick="closeInfraPanel()" title="Close">×</button>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="infra-actions">
+            <button class="infra-action-btn btn-setup" id="btnSetup" onclick="runInfra('setup')">
+                <span class="btn-icon">🚀</span>
+                <span class="btn-label">Setup Full Stack</span>
+            </button>
+            <button class="infra-action-btn btn-teardown" id="btnTeardown" onclick="runInfra('teardown')">
+                <span class="btn-icon">🗑️</span>
+                <span class="btn-label">Teardown Stack</span>
+            </button>
+            <button class="infra-action-btn btn-update" id="btnUpdate" onclick="runInfra('update-lambda')">
+                <span class="btn-icon">🔄</span>
+                <span class="btn-label">Update Lambda</span>
+            </button>
+        </div>
+
+        <!-- Status Banner -->
+        <div class="infra-status-banner" id="infraStatusBanner"></div>
+
+        <!-- Terminal Output -->
+        <div class="infra-terminal" id="infraTerminal">
+            <span class="term-placeholder">// Output will stream here when you run a command...
+// Click "Setup Full Stack" to provision all AWS resources.
+// Click "Teardown Stack" to delete everything.
+// Click "Update Lambda" to redeploy the Lambda function code.</span>
+        </div>
+
+    </div>
+</div>
+
+<script>
+// ================================
+// INFRASTRUCTURE CONTROL PANEL
+// ================================
+
+let infraRunning = false;
+let currentEventSource = null;
+
+function openInfraPanel() {
+    document.getElementById('infraOverlay').classList.add('open');
+}
+
+function closeInfraPanel() {
+    if (infraRunning) return;  // don't close mid-run
+    document.getElementById('infraOverlay').classList.remove('open');
+}
+
+function handleOverlayClick(e) {
+    // Close only when clicking the dark backdrop, not the panel itself
+    if (e.target === document.getElementById('infraOverlay')) {
+        closeInfraPanel();
+    }
+}
+
+// Keyboard: Escape closes the panel
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeInfraPanel();
+});
+
+function setInfraButtons(disabled) {
+    ['btnSetup', 'btnTeardown', 'btnUpdate'].forEach(id => {
+        document.getElementById(id).disabled = disabled;
+    });
+    infraRunning = disabled;
+}
+
+function showBanner(type, msg) {
+    const el = document.getElementById('infraStatusBanner');
+    el.className = `infra-status-banner show ${type}`;
+    el.innerHTML = msg;
+}
+
+function hideBanner() {
+    const el = document.getElementById('infraStatusBanner');
+    el.className = 'infra-status-banner';
+}
+
+function termLine(text) {
+    // Classify each line by its [TAG] prefix for color-coding
+    const classMap = {
+        '[OK]':    'ok',
+        '[SKIP]':  'skip',
+        '[WAIT]':  'wait',
+        '[DEL]':   'del',
+        '[PATCH]': 'patch',
+        '[ERROR]': 'err',
+        '[ENV]':   'skip',
+        '[PKG]':   'wait',
+        '[DONE]':  'done',
+        '===':     'header',
+        '>>>':     'header',
+        '---':     'header',
+    };
+    let cls = 'term-line';
+    for (const [prefix, c] of Object.entries(classMap)) {
+        if (text.trimStart().startsWith(prefix) || text.includes(prefix)) {
+            cls = `term-line ${c}`;
+            break;
+        }
+    }
+    return `<span class="${cls}">${escapeTermHtml(text)}</span>`;
+}
+
+function escapeTermHtml(t) {
+    return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function runInfra(action) {
+    if (infraRunning) return;
+
+    const labels = {
+        'setup':          { label: 'Setup Full Stack',  icon: '🚀' },
+        'teardown':       { label: 'Teardown Stack',    icon: '🗑️' },
+        'update-lambda':  { label: 'Update Lambda',     icon: '🔄' },
+    };
+    const { label, icon } = labels[action];
+
+    // Confirm teardown
+    if (action === 'teardown') {
+        if (!confirm('Are you sure? This will DELETE all AWS resources (S3 Vectors, Lambda, API Gateway).')) return;
+    }
+
+    // Reset terminal
+    const terminal = document.getElementById('infraTerminal');
+    terminal.innerHTML = '';
+
+    setInfraButtons(true);
+    showBanner('running',
+        `<span class="spin-inline">↻</span>&nbsp; Running: ${icon} ${label}...`);
+
+    // Close any existing SSE connection
+    if (currentEventSource) {
+        currentEventSource.close();
+        currentEventSource = null;
+    }
+
+    const es = new EventSource(`/infra/${action}`);
+    currentEventSource = es;
+
+    es.onmessage = (e) => {
+        const data = e.data;
+
+        // Sentinel: script has exited
+        if (data.startsWith('__EXIT_')) {
+            const code = parseInt(data.replace('__EXIT_', ''), 10);
+            es.close();
+            currentEventSource = null;
+            setInfraButtons(false);
+
+            if (code === 0) {
+                showBanner('success', `✅&nbsp; ${icon} ${label} completed successfully!`);
+                const doneEl = document.createElement('span');
+                doneEl.className = 'term-line done';
+                doneEl.textContent = `\n[COMPLETE] ${label} finished with exit code 0`;
+                terminal.appendChild(doneEl);
+
+                // If setup completed, tell user to refresh
+                if (action === 'setup') {
+                    showBanner('success',
+                        '✅&nbsp; Stack deployed! <strong>Restart app.py</strong> to use the new API URL.');
+                }
+            } else {
+                showBanner('failure', `❌&nbsp; ${label} failed (exit code ${code}). Check output above.`);
+                const errEl = document.createElement('span');
+                errEl.className = 'term-line err';
+                errEl.textContent = `\n[FAILED] Exited with code ${code}`;
+                terminal.appendChild(errEl);
+            }
+            terminal.scrollTop = terminal.scrollHeight;
+            return;
+        }
+
+        // Regular log line
+        const lineEl = document.createElement('span');
+        lineEl.innerHTML = termLine(data) + '\n';
+        terminal.appendChild(lineEl);
+        terminal.scrollTop = terminal.scrollHeight;
+    };
+
+    es.onerror = () => {
+        es.close();
+        currentEventSource = null;
+        setInfraButtons(false);
+        showBanner('failure', '❌&nbsp; Connection lost. Check that app.py is running.');
+    };
+}
+</script>
+
+</body>
+</html>

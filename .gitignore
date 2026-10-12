@@ -1,0 +1,8 @@
+# Git ignore — never commit secrets or build artifacts
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.zip
+
+.vercel
