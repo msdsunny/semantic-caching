@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cache Inspector | S3 Vector Index</title>
+    <meta name="description" content="Inspect all cached questions stored in the S3 Vector Index for the semantic caching system.">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <style>
+        /* ================================
+           DESIGN TOKENS (match main app)
+        ================================ */
+        :root {
+            --bg-primary:    #040d1a;
+            --bg-secondary:  #071224;
+            --bg-card:       rgba(10, 25, 50, 0.85);
+            --bg-glass:      rgba(255, 255, 255, 0.03);
+            --border-subtle: rgba(56, 189, 248, 0.12);
+            --border-glow:   rgba(56, 189, 248, 0.35);
+
+            --text-primary:  #e2eeff;
+            --text-secondary:#8da4c8;
+            --text-muted:    #4a6080;
+
+            --accent-cyan:      #38bdf8;
+            --accent-cyan-dim:  rgba(56, 189, 248, 0.12);
+            --accent-cyan-glow: rgba(56, 189, 248, 0.4);
+
+            --hit-color: #10b981;
+            --hit-dim:   rgba(16, 185, 129, 0.12);
+
+            --miss-color: #f97316;
+            --miss-dim:   rgba(249, 115, 22, 0.12);
+
+            --purple:     #818cf8;
+            --purple-dim: rgba(129, 140, 248, 0.12);
+
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+
+            --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            --shadow-glow: 0 0 30px rgba(56, 189, 248, 0.12);
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html { height: 100%; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* Animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 800px 600px at 20% 10%, rgba(56,189,248,0.05) 0%, transparent 60%),
+                radial-gradient(ellipse 600px 500px at 80% 80%, rgba(99,102,241,0.04) 0%, transparent 60%),
+                radial-gradient(ellipse 400px 300px at 50% 50%, rgba(16,185,129,0.03) 0%, transparent 60%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(56,189,248,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(56,189,248,0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ================================
+           HEADER
+        ================================ */
+        .header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 16px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-subtle);
+            background: rgba(4, 13, 26, 0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 0 20px rgba(56,189,248,0.3);
+            flex-shrink: 0;
+        }
+
+        .header-title h1 {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+
+        .header-title p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .back-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-glass);
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 500;
+            text-decoration: none;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .back-btn:hover {
+            border-color: var(--border-glow);
+            color: var(--accent-cyan);
+            background: var(--accent-cyan-dim);
+        }
+
+        .refresh-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 16px;
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(56,189,248,0.3);
+            background: var(--accent-cyan-dim);
+            color: var(--accent-cyan);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            font-family: inherit;
+        }
+
+        .refresh-btn:hover {
+            background: rgba(56,189,248,0.22);
+            box-shadow: 0 0 16px rgba(56,189,248,0.2);
+        }
+
+        .refresh-btn.spinning .refresh-icon {
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ================================
+           MAIN CONTAINER
+        ================================ */
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 32px 24px 60px;
+        }
+
+        /* ================================
+           STAT CARDS
+        ================================ */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 20px 22px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: var(--transition);
+        }
+
+        .stat-card:hover {
+            border-color: var(--border-glow);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 30px;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1;
+        }
+
+        .stat-value.cyan   { color: var(--accent-cyan); }
+        .stat-value.green  { color: var(--hit-color); }
+        .stat-value.purple { color: var(--purple); }
+        .stat-value.orange { color: var(--miss-color); }
+
+        .stat-sub {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* ================================
+           TOOLBAR
+        ================================ */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .search-wrap {
+            flex: 1;
+            min-width: 240px;
+            position: relative;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 15px;
+            pointer-events: none;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 14px 10px 38px;
+            background: rgba(6, 18, 38, 0.9);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 14px;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        .search-input::placeholder { color: var(--text-muted); }
+
+        .search-input:focus {
+            border-color: var(--border-glow);
+            box-shadow: 0 0 0 3px var(--accent-cyan-dim);
+        }
+
+        .result-count {
+            font-size: 13px;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        /* ================================
+           VECTOR LIST
+        ================================ */
+        #vector-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .vector-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: border-color var(--transition), box-shadow var(--transition);
+            animation: slideIn 0.35s ease forwards;
+            opacity: 0;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .vector-card:hover {
+            border-color: var(--border-glow);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 18px 20px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .card-index {
+            min-width: 32px;
+            height: 32px;
+            border-radius: var(--radius-sm);
+            background: var(--accent-cyan-dim);
+            border: 1px solid rgba(56,189,248,0.2);
+            color: var(--accent-cyan);
+            font-size: 12px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .card-main { flex: 1; min-width: 0; }
+
+        .card-question {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            line-height: 1.45;
+            margin-bottom: 6px;
+        }
+
+        .card-key {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .card-key-label {
+            background: var(--bg-glass);
+            border: 1px solid var(--border-subtle);
+            padding: 1px 7px;
+            border-radius: 4px;
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .chevron {
+            color: var(--text-muted);
+            font-size: 16px;
+            transition: transform var(--transition);
+            flex-shrink: 0;
+            margin-top: 6px;
+        }
+
+        .vector-card.expanded .chevron { transform: rotate(180deg); }
+
+        /* Answer section */
+        .card-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .vector-card.expanded .card-body { max-height: 1000px; }
+
+        .card-body-inner {
+            padding: 0 20px 20px;
+            border-top: 1px solid var(--border-subtle);
+            margin-top: 0;
+        }
+
+        .answer-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-top: 16px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .answer-text {
+            font-size: 13.5px;
+            line-height: 1.65;
+            color: var(--text-secondary);
+            background: rgba(6,18,38,0.6);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-sm);
+            padding: 14px 16px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .answer-text::-webkit-scrollbar { width: 4px; }
+        .answer-text::-webkit-scrollbar-track { background: transparent; }
+        .answer-text::-webkit-scrollbar-thumb {
+            background: var(--border-glow);
+            border-radius: 4px;
+        }
+
+        /* Extra metadata chips */
+        .meta-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 12px;
+        }
+
+        .meta-chip {
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--purple-dim);
+            border: 1px solid rgba(129,140,248,0.2);
+            color: var(--purple);
+            border-radius: 4px;
+            padding: 3px 8px;
+        }
+
+        /* ================================
+           EMPTY / LOADING / ERROR STATES
+        ================================ */
+        .state-box {
+            text-align: center;
+            padding: 72px 24px;
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+        }
+
+        .state-icon {
+            font-size: 52px;
+            margin-bottom: 18px;
+        }
+
+        .state-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .state-sub {
+            font-size: 14px;
+            color: var(--text-muted);
+            max-width: 380px;
+            margin: 0 auto 20px;
+            line-height: 1.6;
+        }
+
+        .state-error { color: #f97316; }
+
+        /* Loading dots */
+        .loading-dots span {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--accent-cyan);
+            margin: 0 3px;
+            animation: bounce 1.2s ease infinite;
+        }
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+            40%            { transform: scale(1);   opacity: 1; }
+        }
+
+        /* ================================
+           FOOTER BREADCRUMB
+        ================================ */
+        .breadcrumb {
+            position: relative;
+            z-index: 1;
+            padding: 12px 28px;
+            font-size: 12px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .breadcrumb a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+        }
+
+        .breadcrumb a:hover { text-decoration: underline; }
+
+        /* ================================
+           SECTION TITLE
+        ================================ */
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .section-pill {
+            font-size: 11px;
+            background: var(--accent-cyan-dim);
+            border: 1px solid rgba(56,189,248,0.25);
+            color: var(--accent-cyan);
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Index info bar */
+        .index-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 18px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            backdrop-filter: blur(12px);
+        }
+
+        .index-info {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 12.5px;
+        }
+
+        .index-info-label {
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .index-info-value {
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-subtle);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11.5px;
+        }
+
+        .index-divider {
+            width: 1px;
+            height: 18px;
+            background: var(--border-subtle);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- HEADER -->
+    <header class="header">
+        <div class="header-left">
+            <div class="logo-icon">🗂️</div>
+            <div class="header-title">
+                <h1>Cache Inspector</h1>
+                <p>S3 Vector Index — Live View</p>
+            </div>
+        </div>
+        <div class="header-actions">
+            <a href="/" class="back-btn" id="back-btn">
+                ← Back to Chat
+            </a>
+            <button class="refresh-btn" id="refresh-btn" onclick="loadVectors()">
+                <span class="refresh-icon" id="refresh-icon">↻</span>
+                Refresh
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN -->
+    <div class="container">
+
+        <!-- Stats -->
+        <div class="stats-row" id="stats-row">
+            <div class="stat-card">
+                <div class="stat-label">Cached Entries</div>
+                <div class="stat-value cyan" id="stat-total">—</div>
+                <div class="stat-sub">questions stored</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Index</div>
+                <div class="stat-value green" style="font-size:18px; padding-top:6px;">cache-index</div>
+                <div class="stat-sub">semantic-cache-app</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Embedding Dims</div>
+                <div class="stat-value purple">1024</div>
+                <div class="stat-sub">Titan Embed v2</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Distance Metric</div>
+                <div class="stat-value orange" style="font-size:18px; padding-top:6px;">Cosine</div>
+                <div class="stat-sub">similarity search</div>
+            </div>
+        </div>
+
+        <!-- Index info bar -->
+        <div class="index-bar">
+            <div class="index-info">
+                <span class="index-info-label">Bucket</span>
+                <span class="index-info-value">semantic-cache-app</span>
+            </div>
+            <div class="index-divider"></div>
+            <div class="index-info">
+                <span class="index-info-label">Index</span>
+                <span class="index-info-value">cache-index</span>
+            </div>
+            <div class="index-divider"></div>
+            <div class="index-info">
+                <span class="index-info-label">Region</span>
+                <span class="index-info-value">us-east-1</span>
+            </div>
+            <div class="index-divider"></div>
+            <div class="index-info">
+                <span class="index-info-label">Last refreshed</span>
+                <span class="index-info-value" id="last-refreshed">—</span>
+            </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <div class="search-wrap">
+                <span class="search-icon">🔍</span>
+                <input
+                    type="text"
+                    class="search-input"
+                    id="search-input"
+                    placeholder="Search cached questions…"
+                    oninput="filterVectors()"
+                >
+            </div>
+            <span class="result-count" id="result-count"></span>
+        </div>
+
+        <!-- Section header -->
+        <div class="section-header">
+            <span class="section-title">Stored Vectors</span>
+            <span class="section-pill" id="section-pill">0</span>
+        </div>
+
+        <!-- Vector list -->
+        <div id="vector-list">
+            <!-- populated by JS -->
+        </div>
+
+    </div>
+
+    <!-- BREADCRUMB -->
+    <div class="breadcrumb">
+        <a href="/">Home</a>
+        <span>/</span>
+        <span>Cache Inspector</span>
+    </div>
+
+    <script>
+        let allVectors = [];
+
+        /* ==========================================
+           LOAD VECTORS FROM FLASK API
+        ========================================== */
+        async function loadVectors() {
+            const btn       = document.getElementById('refresh-btn');
+            const icon      = document.getElementById('refresh-icon');
+            const list      = document.getElementById('vector-list');
+            const statTotal = document.getElementById('stat-total');
+            const pill      = document.getElementById('section-pill');
+
+            // Loading state
+            btn.classList.add('spinning');
+            btn.disabled = true;
+            icon.textContent = '↻';
+
+            list.innerHTML = `
+                <div class="state-box">
+                    <div class="state-icon">
+                        <div class="loading-dots">
+                            <span></span><span></span><span></span>
+                        </div>
+                    </div>
+                    <div class="state-title">Fetching from S3 Vector Index…</div>
+                    <div class="state-sub">Connecting to semantic-cache-app / cache-index</div>
+                </div>`;
+
+            try {
+                const res  = await fetch('/api/cache-vectors');
+                const data = await res.json();
+
+                if (data.error) {
+                    showError(data.error);
+                    statTotal.textContent = '—';
+                    pill.textContent = '0';
+                    return;
+                }
+
+                allVectors = data.vectors || [];
+                statTotal.textContent = allVectors.length;
+                pill.textContent      = allVectors.length;
+
+                // Update timestamp
+                document.getElementById('last-refreshed').textContent =
+                    new Date().toLocaleTimeString();
+
+                renderVectors(allVectors);
+
+            } catch (err) {
+                showError('Network error — is the Flask server running?\n' + err.message);
+                statTotal.textContent = '—';
+                pill.textContent = '0';
+            } finally {
+                btn.classList.remove('spinning');
+                btn.disabled = false;
+            }
+        }
+
+        /* ==========================================
+           RENDER
+        ========================================== */
+        function renderVectors(vectors) {
+            const list = document.getElementById('vector-list');
+            const pill = document.getElementById('section-pill');
+            const rc   = document.getElementById('result-count');
+
+            pill.textContent = vectors.length;
+
+            if (vectors.length === 0) {
+                const query = document.getElementById('search-input').value.trim();
+                if (query) {
+                    list.innerHTML = `
+                        <div class="state-box">
+                            <div class="state-icon">🔎</div>
+                            <div class="state-title">No matches found</div>
+                            <div class="state-sub">No cached questions match "<strong>${escHtml(query)}</strong>"</div>
+                        </div>`;
+                } else {
+                    list.innerHTML = `
+                        <div class="state-box">
+                            <div class="state-icon">📭</div>
+                            <div class="state-title">Cache is empty</div>
+                            <div class="state-sub">No questions have been cached yet. Ask something in the chat — it will appear here after the first answer is stored.</div>
+                        </div>`;
+                }
+                rc.textContent = '';
+                return;
+            }
+
+            rc.textContent = `${vectors.length} result${vectors.length !== 1 ? 's' : ''}`;
+
+            list.innerHTML = vectors.map((v, i) => buildCard(v, i)).join('');
+
+            // Stagger animation delay
+            list.querySelectorAll('.vector-card').forEach((card, idx) => {
+                card.style.animationDelay = `${idx * 40}ms`;
+            });
+        }
+
+        function buildCard(v, i) {
+            const question = escHtml(v.question || '(no question stored)');
+            const key      = escHtml(v.key || '');
+            const answer   = escHtml(v.answer || '(no answer stored)');
+
+            // Extra metadata (exclude known fields)
+            const skipKeys = new Set(['question','prompt','answer','response']);
+            const extraMeta = Object.entries(v.metadata || {})
+                .filter(([k]) => !skipKeys.has(k))
+                .map(([k, val]) =>
+                    `<span class="meta-chip">${escHtml(k)}: ${escHtml(String(val))}</span>`)
+                .join('');
+
+            return `
+                <div class="vector-card" id="card-${i}">
+                    <div class="card-header" onclick="toggleCard(${i})">
+                        <div class="card-index">#${i + 1}</div>
+                        <div class="card-main">
+                            <div class="card-question">${question}</div>
+                            <div class="card-key">
+                                <span class="card-key-label">Key</span>
+                                ${key}
+                            </div>
+                        </div>
+                        <div class="chevron">⌄</div>
+                    </div>
+                    <div class="card-body">
+                        <div class="card-body-inner">
+                            <div class="answer-label">💬 Cached Answer</div>
+                            <div class="answer-text">${answer}</div>
+                            ${extraMeta ? `
+                                <div class="answer-label" style="margin-top:14px;">🏷️ Extra Metadata</div>
+                                <div class="meta-chips">${extraMeta}</div>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        function toggleCard(i) {
+            const card = document.getElementById(`card-${i}`);
+            card.classList.toggle('expanded');
+        }
+
+        /* ==========================================
+           SEARCH / FILTER
+        ========================================== */
+        function filterVectors() {
+            const q = document.getElementById('search-input').value.trim().toLowerCase();
+            if (!q) {
+                renderVectors(allVectors);
+                return;
+            }
+            const filtered = allVectors.filter(v =>
+                (v.question || '').toLowerCase().includes(q) ||
+                (v.answer   || '').toLowerCase().includes(q) ||
+                (v.key      || '').toLowerCase().includes(q)
+            );
+            renderVectors(filtered);
+        }
+
+        /* ==========================================
+           ERROR STATE
+        ========================================== */
+        function showError(msg) {
+            document.getElementById('vector-list').innerHTML = `
+                <div class="state-box">
+                    <div class="state-icon">⚠️</div>
+                    <div class="state-title state-error">Failed to load vectors</div>
+                    <div class="state-sub" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--miss-color);">${escHtml(msg)}</div>
+                </div>`;
+        }
+
+        /* ==========================================
+           UTILS
+        ========================================== */
+        function escHtml(str) {
+            return String(str)
+                .replace(/&/g,'&amp;')
+                .replace(/</g,'&lt;')
+                .replace(/>/g,'&gt;')
+                .replace(/"/g,'&quot;');
+        }
+
+        // Load on page init
+        loadVectors();
+    </script>
+</body>
+</html>

@@ -217,6 +217,49 @@ def infra_update_lambda():
     return _stream_script(["update_lambda.py"])
 
 
+@app.route("/cache-inspector")
+def cache_inspector():
+    """Render the Cache Inspector page."""
+    return render_template("cache_inspector.html")
+
+
+@app.route("/api/cache-vectors", methods=["GET"])
+def api_cache_vectors():
+    """
+    Returns all vectors stored in the S3 Vector index as JSON.
+    Each item includes: key, question, answer, and any extra metadata.
+    """
+    region      = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+    bucket_name = "semantic-cache-app"
+    index_name  = "cache-index"
+
+    try:
+        client = boto3.client("s3vectors", region_name=region)
+        paginator = client.get_paginator("list_vectors")
+        pages = paginator.paginate(
+            vectorBucketName=bucket_name,
+            indexName=index_name,
+            returnData=False,
+            returnMetadata=True,
+        )
+
+        items = []
+        for page in pages:
+            for vec in page.get("vectors", []):
+                metadata = vec.get("metadata", {})
+                items.append({
+                    "key":      vec.get("key", ""),
+                    "question": metadata.get("question", metadata.get("prompt", "")),
+                    "answer":   metadata.get("answer",   metadata.get("response", "")),
+                    "metadata": metadata,
+                })
+
+        return jsonify({"vectors": items, "total": len(items)})
+
+    except Exception as e:
+        return jsonify({"error": str(e), "vectors": [], "total": 0}), 500
+
+
 @app.route("/infra/status", methods=["GET"])
 def infra_status():
     """
