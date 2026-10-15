@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cosine vs Euclidean Distance — Visual Explainer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0b0f1a;
+      --surface: #111827;
+      --surface2: #1a2234;
+      --border: #1e2d45;
+      --accent-blue: #3b82f6;
+      --accent-purple: #8b5cf6;
+      --accent-green: #10b981;
+      --accent-orange: #f59e0b;
+      --accent-red: #ef4444;
+      --text: #e2e8f0;
+      --text-dim: #64748b;
+      --cosine-color: #3b82f6;
+      --euclid-color: #ef4444;
+      --vec-a: #10b981;
+      --vec-b: #f59e0b;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    header {
+      text-align: center;
+      padding: 3rem 1rem 1.5rem;
+      background: radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.15) 0%, transparent 70%);
+    }
+    header h1 {
+      font-size: clamp(1.6rem, 4vw, 2.8rem);
+      font-weight: 800;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6, #10b981);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+    }
+    header p { color: var(--text-dim); font-size: 1rem; }
+
+    .tabs {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 1.5rem 1rem 0;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      padding: 0.6rem 1.4rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-dim);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s;
+    }
+    .tab-btn:hover { border-color: var(--accent-blue); color: var(--text); }
+    .tab-btn.active {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      border-color: transparent;
+      color: #fff;
+      box-shadow: 0 0 20px rgba(59,130,246,0.4);
+    }
+
+    .main {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    @media(max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .badge {
+      font-size: 0.7rem;
+      padding: 0.15rem 0.6rem;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .badge-blue  { background: rgba(59,130,246,0.2); color: #3b82f6; }
+    .badge-red   { background: rgba(239,68,68,0.2);  color: #ef4444; }
+    .badge-green { background: rgba(16,185,129,0.2); color: #10b981; }
+
+    canvas {
+      width: 100%;
+      border-radius: 12px;
+      background: #080d16;
+      display: block;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      align-items: center;
+    }
+    .btn {
+      padding: 0.5rem 1.1rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn:hover { background: var(--accent-blue); border-color: var(--accent-blue); }
+    .btn.active-btn { background: var(--accent-blue); border-color: var(--accent-blue); }
+
+    .slider-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.82rem;
+      color: var(--text-dim);
+    }
+    input[type=range] {
+      -webkit-appearance: none;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      outline: none;
+      cursor: pointer;
+      width: 100px;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      cursor: pointer;
+    }
+
+    .info-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem 1.5rem;
+      margin-top: 1rem;
+      font-size: 0.88rem;
+      line-height: 1.7;
+    }
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .metric:last-child { border-bottom: none; }
+    .metric-label { color: var(--text-dim); }
+    .metric-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    .verdict {
+      margin-top: 0.8rem;
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.88rem;
+      text-align: center;
+    }
+    .verdict.hit  { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+    .verdict.miss { background: rgba(239,68,68,0.15);  color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+
+    .explainer {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .explainer h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.8rem; color: var(--accent-blue); }
+    .explainer p  { font-size: 0.88rem; color: var(--text-dim); line-height: 1.7; margin-bottom: 0.5rem; }
+    .explainer p:last-child { margin-bottom: 0; }
+    .highlight { color: var(--text); font-weight: 600; }
+
+    .sentence-demo {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .sentence-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem;
+      cursor: pointer;
+      transition: all 0.25s;
+    }
+    .sentence-card:hover { border-color: var(--accent-blue); }
+    .sentence-card.selected { border-color: var(--accent-blue); background: rgba(59,130,246,0.08); }
+    .sentence-card .s-label { font-size: 0.72rem; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+    .sentence-card .s-text  { font-size: 0.88rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .sentence-card .s-vec   { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--text-dim); }
+
+    .compare-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin-top: 1rem;
+    }
+    .compare-table th {
+      background: var(--surface2);
+      padding: 0.7rem 1rem;
+      text-align: left;
+      font-weight: 600;
+      color: var(--text-dim);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .compare-table td {
+      padding: 0.7rem 1rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .compare-table tr:last-child td { border-bottom: none; }
+    .compare-table .win  { color: #10b981; font-weight: 700; }
+    .compare-table .lose { color: #ef4444; }
+
+    .bar-wrap { background: var(--border); border-radius:4px; height:10px; overflow:hidden; margin-top:0.4rem; }
+    .bar-fill  { height:100%; border-radius:4px; transition: width 0.15s; }
+    .bar-label { font-size:0.8rem; color:var(--text-dim); margin-bottom:0.2rem; margin-top:0.8rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📐 Cosine vs Euclidean Distance</h1>
+  <p>Interactive visual explainer — drag vectors, see distances update live</p>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('playground')">🎮 Interactive Playground</button>
+  <button class="tab-btn" onclick="switchTab('problem')">⚠️ Why Euclidean Fails</button>
+  <button class="tab-btn" onclick="switchTab('compare')">📊 Side-by-Side</button>
+</div>
+
+<div class="main">
+
+  <!-- ══════════════ PLAYGROUND ══════════════ -->
+  <div class="panel active" id="panel-playground">
+    <div class="explainer">
+      <h3>🎮 How to use this playground</h3>
+      <p>Two vectors (arrows) are drawn from the origin. <span class="highlight">Drag the colored dots at the arrow tips</span> to move them. Watch how <span class="highlight" style="color:#3b82f6">Cosine Distance</span> (angle) and <span class="highlight" style="color:#ef4444">Euclidean Distance</span> (ruler) react very differently!</p>
+      <p>Key insight: Cosine cares only about the <span class="highlight">angle between arrows</span>. Euclidean measures the <span class="highlight">straight-line gap between the two tips</span>.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>🗺️ Vector Space <span class="badge badge-blue">Drag the dots!</span></h2>
+        <canvas id="playCanvas" width="480" height="480"></canvas>
+        <div class="controls">
+          <button class="btn" onclick="resetVectors()">↺ Reset</button>
+          <button class="btn" id="animBtn" onclick="toggleAnimate()">▶ Animate</button>
+          <div class="slider-group">
+            <span>Zoom:</span>
+            <input type="range" id="zoomSlider" min="3" max="12" value="6" oninput="drawPlayground()">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📏 Distance Metrics</h2>
+        <div class="info-box">
+          <div class="metric">
+            <span class="metric-label">🟢 Vector A</span>
+            <span class="metric-value" id="vecAPos" style="color:#10b981">(3.0, 4.0)</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">🟡 Vector B</span>
+            <span class="metric-value" id="vecBPos" style="color:#f59e0b">(4.0, 2.0)</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">📐 Angle between arrows</span>
+            <span class="metric-value" id="angleDeg">—</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label" style="color:#3b82f6">🔵 Cosine Distance</span>
+            <span class="metric-value" id="cosineDist" style="color:#3b82f6">—</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label" style="color:#ef4444">🔴 Euclidean Distance</span>
+            <span class="metric-value" id="euclidDist" style="color:#ef4444">—</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">✅ Cosine Similarity %</span>
+            <span class="metric-value" id="cosineSim">—</span>
+          </div>
+        </div>
+
+        <div id="playVerdict" class="verdict hit">🟢 CACHE HIT</div>
+
+        <div class="bar-label">Cosine Distance (0 = identical, 1 = opposite)</div>
+        <div class="bar-wrap"><div class="bar-fill" id="cosineBar" style="width:0%;background:linear-gradient(90deg,#3b82f6,#8b5cf6)"></div></div>
+
+        <div class="bar-label">Euclidean Distance (scales with position)</div>
+        <div class="bar-wrap"><div class="bar-fill" id="euclidBar" style="width:0%;background:linear-gradient(90deg,#ef4444,#f59e0b)"></div></div>
+
+        <div style="margin-top:1rem;font-size:0.82rem;color:var(--text-dim);line-height:1.6" id="playInsight">Drag the arrow tips to explore!</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ PROBLEM ══════════════ -->
+  <div class="panel" id="panel-problem">
+    <div class="explainer">
+      <h3>⚠️ The Core Problem: Same Meaning, Different Length</h3>
+      <p>Both <span class="highlight">"price"</span> and <span class="highlight">"What is the full price of the service you offer to customers?"</span> mean the same thing. But a longer sentence creates a vector with a <span class="highlight">larger magnitude</span> (longer arrow). Euclidean sees them as far apart. Cosine sees them as nearly identical.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:1.5rem">
+      <h2>🎬 Animation: Same Direction, Different Length</h2>
+      <canvas id="problemCanvas" width="900" height="420" style="max-width:100%"></canvas>
+      <div class="controls">
+        <button class="btn active-btn" onclick="startProblemAnim()">▶ Play Animation</button>
+        <button class="btn" onclick="resetProblemAnim()">↺ Reset</button>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>🔴 Euclidean Says <span class="badge badge-red">WRONG</span></h2>
+        <div class="info-box">
+          <div class="metric"><span class="metric-label">"price" magnitude</span><span class="metric-value" style="color:#10b981">1.0</span></div>
+          <div class="metric"><span class="metric-label">"What is the price of..." magnitude</span><span class="metric-value" style="color:#f59e0b">3.0</span></div>
+          <div class="metric"><span class="metric-label">Euclidean Distance</span><span class="metric-value" style="color:#ef4444">≈ 2.83 (FAR!)</span></div>
+          <div class="verdict miss">❌ Euclidean thinks they are DIFFERENT topics!</div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>🔵 Cosine Says <span class="badge badge-green">CORRECT</span></h2>
+        <div class="info-box">
+          <div class="metric"><span class="metric-label">"price" direction</span><span class="metric-value" style="color:#10b981">45°</span></div>
+          <div class="metric"><span class="metric-label">"What is the price of..." direction</span><span class="metric-value" style="color:#f59e0b">45°</span></div>
+          <div class="metric"><span class="metric-label">Cosine Distance</span><span class="metric-value" style="color:#10b981">≈ 0.000 (SAME!)</span></div>
+          <div class="verdict hit">✅ Cosine knows they mean the SAME thing!</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ COMPARE ══════════════ -->
+  <div class="panel" id="panel-compare">
+    <div class="explainer">
+      <h3>📊 Click a sentence pair to visualize both distances live</h3>
+      <p>These pairs are inspired by your semantic caching project. Notice how in Pair 2, <span class="highlight">Euclidean gives a wrong answer</span> while Cosine correctly identifies the same meaning.</p>
+    </div>
+
+    <div class="sentence-demo" id="sentenceDemo">
+      <div class="sentence-card selected" onclick="selectPair(0)">
+        <div class="s-label">Pair 1 — Similar meaning</div>
+        <div class="s-text">"price?" ↔ "How much does it cost?"</div>
+        <div class="s-vec">Expected: high similarity ✅</div>
+      </div>
+      <div class="sentence-card" onclick="selectPair(1)">
+        <div class="s-label">Pair 2 — Short vs Long ⚠️</div>
+        <div class="s-text">"price" ↔ "What is the full price?"</div>
+        <div class="s-vec">Euclidean fails here!</div>
+      </div>
+      <div class="sentence-card" onclick="selectPair(2)">
+        <div class="s-label">Pair 3 — Different topic</div>
+        <div class="s-text">"What is the price?" ↔ "What's the weather?"</div>
+        <div class="s-vec">Both agree: different ❌</div>
+      </div>
+      <div class="sentence-card" onclick="selectPair(3)">
+        <div class="s-label">Pair 4 — Identical</div>
+        <div class="s-text">"What is the price?" ↔ "What is the price?"</div>
+        <div class="s-vec">Both should be 0.000 🎯</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:1.5rem">
+      <h2>📐 Side-by-Side Canvas</h2>
+      <canvas id="compareCanvas" width="900" height="400" style="max-width:100%"></canvas>
+    </div>
+
+    <div class="card">
+      <h2>📋 Full Comparison Table</h2>
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th style="color:#3b82f6">🔵 Cosine Distance</th>
+            <th style="color:#ef4444">🔴 Euclidean Distance</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>What it measures</td><td class="win">Angle between arrows (direction)</td><td class="lose">Straight-line gap between points</td></tr>
+          <tr><td>Affected by sentence length?</td><td class="win">NO — only direction matters</td><td class="lose">YES — longer sentence = bigger vector</td></tr>
+          <tr><td>Works in 1024 dimensions?</td><td class="win">YES — angle stays meaningful</td><td class="lose">NO — curse of dimensionality</td></tr>
+          <tr><td>"price" vs "What is the price?"</td><td class="win">≈ 0.001 (same!)</td><td class="lose">≈ 2.83 (wrong — says different)</td></tr>
+          <tr><td>Best for text semantics?</td><td class="win">✅ YES — industry standard</td><td class="lose">❌ NO</td></tr>
+          <tr><td>Used in this project?</td><td class="win">✅ YES (S3 Vectors default)</td><td class="lose">❌ NO</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─── Math helpers ───────────────────────────────────────
+function dot(a,b){ return a.x*b.x + a.y*b.y; }
+function mag(v){ return Math.sqrt(v.x*v.x + v.y*v.y); }
+function cosDist(a,b){ const d=dot(a,b)/(mag(a)*mag(b)); return 1-Math.max(-1,Math.min(1,d)); }
+function eucDist(a,b){ return Math.sqrt((a.x-b.x)**2+(a.y-b.y)**2); }
+function angleDegFn(a,b){ return Math.acos(Math.max(-1,Math.min(1,dot(a,b)/(mag(a)*mag(b)))))*180/Math.PI; }
+
+// ─── Tab switching ───────────────────────────────────────
+function switchTab(name){
+  const names=['playground','problem','compare'];
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',names[i]===name));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  if(name==='problem') drawProblem(0);
+  if(name==='compare') drawCompare(0);
+}
+
+// ═══════════════════════════════════════════════════════
+// PLAYGROUND
+// ═══════════════════════════════════════════════════════
+const pc = document.getElementById('playCanvas');
+const ctx = pc.getContext('2d');
+let vA={x:3,y:4}, vB={x:4,y:2};
+let dragging=null, animating=false, animId=null, animT=0;
+
+function worldToC(v){
+  const zoom=parseInt(document.getElementById('zoomSlider').value);
+  const cx=pc.width/2, cy=pc.height/2, step=pc.width/(zoom*2);
+  return {x:cx+v.x*step, y:cy-v.y*step};
+}
+function cToWorld(p){
+  const zoom=parseInt(document.getElementById('zoomSlider').value);
+  const cx=pc.width/2, cy=pc.height/2, step=pc.width/(zoom*2);
+  return {x:(p.x-cx)/step, y:(cy-p.y)/step};
+}
+
+function drawPlayground(){
+  const W=pc.width, H=pc.height;
+  const zoom=parseInt(document.getElementById('zoomSlider').value);
+  const cx=W/2, cy=H/2, step=W/(zoom*2);
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#080d16'; ctx.fillRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=1;
+  for(let i=-zoom;i<=zoom;i++){
+    ctx.beginPath(); ctx.moveTo(cx+i*step,0); ctx.lineTo(cx+i*step,H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,cy+i*step); ctx.lineTo(W,cy+i*step); ctx.stroke();
+  }
+  // Axes
+  ctx.strokeStyle='rgba(255,255,255,0.14)'; ctx.lineWidth=1.5; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(0,cy); ctx.lineTo(W,cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,0); ctx.lineTo(cx,H); ctx.stroke();
+  ctx.fillStyle='rgba(100,116,139,0.7)'; ctx.font='11px Inter'; ctx.textAlign='center';
+  ctx.fillText('x →',W-18,cy-6); ctx.fillText('↑ y',cx+18,14);
+
+  const pA=worldToC(vA), pB=worldToC(vB), ori=worldToC({x:0,y:0});
+
+  // Euclidean dashed line
+  ctx.save(); ctx.setLineDash([6,4]);
+  ctx.strokeStyle='rgba(239,68,68,0.65)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(pA.x,pA.y); ctx.lineTo(pB.x,pB.y); ctx.stroke();
+  ctx.restore();
+  const ed=eucDist(vA,vB);
+  ctx.fillStyle='rgba(239,68,68,0.9)'; ctx.font='bold 11px JetBrains Mono'; ctx.textAlign='center';
+  ctx.fillText(`d=${ed.toFixed(2)}`, (pA.x+pB.x)/2, (pA.y+pB.y)/2-10);
+
+  // Cosine angle arc
+  const angA=Math.atan2(-vA.y,vA.x), angB=Math.atan2(-vB.y,vB.x);
+  const arcR=Math.min(55, Math.min(mag(vA),mag(vB))*step*0.45);
+  ctx.save(); ctx.strokeStyle='rgba(59,130,246,0.7)'; ctx.lineWidth=2; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.arc(ori.x,ori.y,arcR,Math.min(angA,angB),Math.max(angA,angB)); ctx.stroke();
+  const midAng=(angA+angB)/2;
+  ctx.fillStyle='rgba(59,130,246,0.9)'; ctx.font='bold 11px JetBrains Mono'; ctx.textAlign='center';
+  ctx.fillText(`${angleDegFn(vA,vB).toFixed(1)}°`, ori.x+Math.cos(midAng)*(arcR+20), ori.y+Math.sin(midAng)*(arcR+20));
+  ctx.restore();
+
+  // Vectors
+  drawArrow(ctx,ori,pA,'#10b981',3,'A');
+  drawArrow(ctx,ori,pB,'#f59e0b',3,'B');
+  drawDot(ctx,pA,'#10b981'); drawDot(ctx,pB,'#f59e0b');
+
+  // Update UI
+  const cd=cosDist(vA,vB), sim=((1-cd)*100);
+  document.getElementById('vecAPos').textContent=`(${vA.x.toFixed(1)}, ${vA.y.toFixed(1)})`;
+  document.getElementById('vecBPos').textContent=`(${vB.x.toFixed(1)}, ${vB.y.toFixed(1)})`;
+  document.getElementById('angleDeg').textContent=`${angleDegFn(vA,vB).toFixed(1)}°`;
+  document.getElementById('cosineDist').textContent=cd.toFixed(4);
+  document.getElementById('euclidDist').textContent=ed.toFixed(4);
+  document.getElementById('cosineSim').textContent=`${sim.toFixed(1)}%`;
+  document.getElementById('cosineBar').style.width=Math.min(100,cd*100)+'%';
+  document.getElementById('euclidBar').style.width=Math.min(100,ed/14*100)+'%';
+
+  const vEl=document.getElementById('playVerdict');
+  if(cd<=0.25){ vEl.className='verdict hit'; vEl.textContent=`🟢 CACHE HIT — similarity: ${sim.toFixed(1)}% ≥ 75%`; }
+  else { vEl.className='verdict miss'; vEl.textContent=`🔴 CACHE MISS — similarity: ${sim.toFixed(1)}% < 75%`; }
+
+  const ins=document.getElementById('playInsight');
+  if(cd<0.05)      ins.textContent='🟰 Arrows almost identical direction → same meaning → strong HIT!';
+  else if(cd<0.25) ins.textContent='✅ Small angle between arrows → similar meaning → Cache HIT!';
+  else if(cd<0.5)  ins.textContent='⚠️ Moderate angle → somewhat related, but MISS at 75% threshold.';
+  else             ins.textContent='❌ Large angle → very different meanings → Cache MISS.';
+}
+
+function drawArrow(ctx,from,to,color,w,label){
+  const dx=to.x-from.x,dy=to.y-from.y,len=Math.sqrt(dx*dx+dy*dy);
+  if(len<2) return;
+  const ux=dx/len,uy=dy/len,hw=9,hl=13;
+  ctx.strokeStyle=color; ctx.lineWidth=w; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(from.x,from.y); ctx.lineTo(to.x-ux*hl,to.y-uy*hl); ctx.stroke();
+  ctx.fillStyle=color;
+  ctx.beginPath(); ctx.moveTo(to.x,to.y); ctx.lineTo(to.x-ux*hl+uy*hw/2,to.y-uy*hl-ux*hw/2); ctx.lineTo(to.x-ux*hl-uy*hw/2,to.y-uy*hl+ux*hw/2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle=color; ctx.font='bold 13px Inter'; ctx.textAlign='center';
+  ctx.fillText(label, to.x+ux*18, to.y+uy*18);
+}
+function drawDot(ctx,p,color){
+  ctx.beginPath(); ctx.arc(p.x,p.y,8,0,Math.PI*2);
+  ctx.fillStyle=color; ctx.fill();
+  ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+}
+
+function resetVectors(){ vA={x:3,y:4}; vB={x:4,y:2}; stopAnimate(); drawPlayground(); }
+function toggleAnimate(){ animating ? stopAnimate() : startAnimate(); }
+function startAnimate(){
+  animating=true;
+  document.getElementById('animBtn').textContent='⏸ Pause';
+  document.getElementById('animBtn').classList.add('active-btn');
+  animT=0; animLoop();
+}
+function stopAnimate(){
+  animating=false;
+  document.getElementById('animBtn').textContent='▶ Animate';
+  document.getElementById('animBtn').classList.remove('active-btn');
+  if(animId) cancelAnimationFrame(animId);
+}
+function animLoop(){
+  if(!animating) return;
+  animT+=0.015;
+  vA={x:3*Math.cos(animT),   y:4*Math.sin(animT*0.7+0.5)};
+  vB={x:4*Math.cos(animT*0.5+1), y:3*Math.sin(animT+2)};
+  if(mag(vA)<0.3) vA={x:2,y:2};
+  if(mag(vB)<0.3) vB={x:2,y:2};
+  drawPlayground();
+  animId=requestAnimationFrame(animLoop);
+}
+
+// Drag
+function getPos(e,canvas){
+  const r=canvas.getBoundingClientRect(),sx=canvas.width/r.width,sy=canvas.height/r.height;
+  const cx=e.touches?e.touches[0].clientX:e.clientX, cy2=e.touches?e.touches[0].clientY:e.clientY;
+  return {x:(cx-r.left)*sx,y:(cy2-r.top)*sy};
+}
+function hit(cp,wv){const p=worldToC(wv);return Math.hypot(cp.x-p.x,cp.y-p.y)<18;}
+pc.addEventListener('mousedown',e=>{stopAnimate();const p=getPos(e,pc);if(hit(p,vA))dragging='A';else if(hit(p,vB))dragging='B';});
+pc.addEventListener('mousemove',e=>{if(!dragging)return;const w=cToWorld(getPos(e,pc));if(dragging==='A')vA=w;else vB=w;drawPlayground();});
+pc.addEventListener('mouseup',()=>dragging=null);
+pc.addEventListener('touchstart',e=>{stopAnimate();const p=getPos(e,pc);if(hit(p,vA))dragging='A';else if(hit(p,vB))dragging='B';},{passive:true});
+pc.addEventListener('touchmove',e=>{if(!dragging)return;e.preventDefault();const w=cToWorld(getPos(e,pc));if(dragging==='A')vA=w;else vB=w;drawPlayground();},{passive:false});
+pc.addEventListener('touchend',()=>dragging=null);
+drawPlayground();
+
+// ═══════════════════════════════════════════════════════
+// PROBLEM CANVAS
+// ═══════════════════════════════════════════════════════
+const prc=document.getElementById('problemCanvas');
+const pctx=prc.getContext('2d');
+let probId=null, probPhase=0;
+
+function drawProblem(phase){
+  const W=prc.width,H=prc.height;
+  pctx.clearRect(0,0,W,H); pctx.fillStyle='#080d16'; pctx.fillRect(0,0,W,H);
+  const pw=W/2;
+
+  // Panels
+  pctx.fillStyle='rgba(239,68,68,0.06)'; pctx.fillRect(0,0,pw,H);
+  pctx.fillStyle='rgba(59,130,246,0.06)'; pctx.fillRect(pw,0,pw,H);
+  pctx.strokeStyle='rgba(255,255,255,0.08)'; pctx.lineWidth=1;
+  pctx.beginPath(); pctx.moveTo(pw,0); pctx.lineTo(pw,H); pctx.stroke();
+
+  pctx.font='bold 14px Inter'; pctx.textAlign='center';
+  pctx.fillStyle='rgba(239,68,68,0.9)'; pctx.fillText('🔴 EUCLIDEAN DISTANCE',pw/2,30);
+  pctx.fillStyle='rgba(59,130,246,0.9)'; pctx.fillText('🔵 COSINE DISTANCE',pw+pw/2,30);
+
+  const frac=Math.min(1,phase/70);
+  // --- LEFT ---
+  const ox1=pw*0.28, oy1=H*0.72;
+  const sx1=ox1+70,sy1=oy1-70;
+  const lx1=ox1+70+frac*180,ly1=oy1-70-frac*180;
+  drawSmallGrid(pctx,ox1,oy1,pw*0.85,H*0.72);
+  drawArrP(pctx,ox1,oy1,sx1,sy1,'#10b981',2.5,'"price"');
+  drawArrP(pctx,ox1,oy1,lx1,ly1,'#f59e0b',2.5,'"What is the price of..."');
+  // Euclid line
+  pctx.save(); pctx.setLineDash([5,4]); pctx.strokeStyle='rgba(239,68,68,0.8)'; pctx.lineWidth=2;
+  pctx.beginPath(); pctx.moveTo(sx1,sy1); pctx.lineTo(lx1,ly1); pctx.stroke(); pctx.restore();
+  const edd=Math.hypot(lx1-sx1,ly1-sy1)/35;
+  if(frac>0.1){
+    pctx.fillStyle='rgba(239,68,68,0.9)'; pctx.font='bold 11px JetBrains Mono'; pctx.textAlign='center';
+    pctx.fillText(`dist = ${edd.toFixed(2)} — FAR! ❌`, (sx1+lx1)/2+30, (sy1+ly1)/2-10);
+  }
+
+  // --- RIGHT ---
+  const ox2=pw+pw*0.28, oy2=H*0.72;
+  const sx2=ox2+70, sy2=oy2-70;
+  const lx2=ox2+70+frac*180, ly2=oy2-70-frac*180;
+  drawSmallGrid(pctx,ox2,oy2,pw*0.85,H*0.72);
+  drawArrP(pctx,ox2,oy2,sx2,sy2,'#10b981',2.5,'"price"');
+  drawArrP(pctx,ox2,oy2,lx2,ly2,'#f59e0b',2.5,'"What is the price of..."');
+  // Angle arc
+  pctx.save(); pctx.strokeStyle='rgba(59,130,246,0.8)'; pctx.lineWidth=2.5; pctx.setLineDash([]);
+  const a1=Math.atan2(-(sy2-oy2),sx2-ox2), a2=Math.atan2(-(ly2-oy2),lx2-ox2);
+  if(Math.abs(a1-a2)>0.005){
+    pctx.beginPath(); pctx.arc(ox2,oy2,45,Math.min(a1,a2),Math.max(a1,a2)); pctx.stroke();
+  }
+  pctx.restore();
+  if(frac>0.1){
+    pctx.fillStyle='rgba(59,130,246,0.9)'; pctx.font='bold 11px JetBrains Mono'; pctx.textAlign='center';
+    pctx.fillText('angle ≈ 0° → SAME direction! ✅', ox2+80, oy2-35);
+  }
+
+  if(frac>0.6){
+    pctx.font='bold 13px Inter'; pctx.textAlign='center';
+    pctx.fillStyle='rgba(239,68,68,0.9)'; pctx.fillText('❌ Euclidean: "DIFFERENT!" (wrong)', pw/2, H-18);
+    pctx.fillStyle='rgba(16,185,129,0.9)'; pctx.fillText('✅ Cosine: "SAME meaning!" (correct)', pw+pw/2, H-18);
+  }
+}
+
+function drawSmallGrid(ctx,ox,oy,w,h){
+  ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=1; ctx.setLineDash([]);
+  const stepX=w/8, stepY=h/6;
+  for(let i=0;i<=8;i++){ ctx.beginPath(); ctx.moveTo(ox-w/2+i*stepX,oy-h+30); ctx.lineTo(ox-w/2+i*stepX,oy); ctx.stroke(); }
+  for(let i=0;i<=6;i++){ ctx.beginPath(); ctx.moveTo(ox-w/2,oy-h+30+i*stepY); ctx.lineTo(ox+w/2,oy-h+30+i*stepY); ctx.stroke(); }
+  ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(ox-w/2,oy); ctx.lineTo(ox+w/2,oy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ox,oy-h+30); ctx.lineTo(ox,oy); ctx.stroke();
+}
+
+function drawArrP(ctx,fx,fy,tx,ty,color,w,label){
+  const dx=tx-fx,dy=ty-fy,len=Math.hypot(dx,dy);
+  if(len<2) return;
+  const ux=dx/len,uy=dy/len,hw=8,hl=11;
+  ctx.strokeStyle=color; ctx.lineWidth=w; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(fx,fy); ctx.lineTo(tx-ux*hl,ty-uy*hl); ctx.stroke();
+  ctx.fillStyle=color;
+  ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(tx-ux*hl+uy*hw/2,ty-uy*hl-ux*hw/2); ctx.lineTo(tx-ux*hl-uy*hw/2,ty-uy*hl+ux*hw/2); ctx.closePath(); ctx.fill();
+  if(label){ ctx.fillStyle=color; ctx.font='11px Inter'; ctx.textAlign='center'; ctx.fillText(label,tx+ux*28,ty+uy*18); }
+}
+
+function startProblemAnim(){
+  if(probId) cancelAnimationFrame(probId);
+  probPhase=0;
+  (function loop(){ drawProblem(probPhase++); if(probPhase<110) probId=requestAnimationFrame(loop); })();
+}
+function resetProblemAnim(){ if(probId) cancelAnimationFrame(probId); probPhase=0; drawProblem(0); }
+drawProblem(0);
+
+// ═══════════════════════════════════════════════════════
+// COMPARE CANVAS
+// ═══════════════════════════════════════════════════════
+const cc=document.getElementById('compareCanvas');
+const cctx=cc.getContext('2d');
+
+const PAIRS=[
+  {a:{x:4,y:3}, b:{x:3.5,y:3.8}, la:'"price?"',        lb:'"How much does it cost?"'},
+  {a:{x:1.5,y:1}, b:{x:5.5,y:3.7}, la:'"price"',        lb:'"What is the full price?"'},
+  {a:{x:4,y:3},  b:{x:-3,y:4},    la:'"What is price?"', lb:'"What\'s the weather?"'},
+  {a:{x:4,y:3},  b:{x:4,y:3},     la:'"What is price?"', lb:'"What is price?"'},
+];
+
+let selectedPair=0;
+function selectPair(i){
+  selectedPair=i;
+  document.querySelectorAll('.sentence-card').forEach((c,j)=>c.classList.toggle('selected',j===i));
+  drawCompare(i);
+}
+
+function drawCompare(pi){
+  const W=cc.width,H=cc.height,pw=W/2;
+  cctx.clearRect(0,0,W,H); cctx.fillStyle='#080d16'; cctx.fillRect(0,0,W,H);
+  const pr=PAIRS[pi];
+  cctx.fillStyle='rgba(239,68,68,0.06)'; cctx.fillRect(0,0,pw,H);
+  cctx.fillStyle='rgba(59,130,246,0.06)'; cctx.fillRect(pw,0,pw,H);
+  cctx.strokeStyle='rgba(255,255,255,0.08)'; cctx.lineWidth=1;
+  cctx.beginPath(); cctx.moveTo(pw,0); cctx.lineTo(pw,H); cctx.stroke();
+  cctx.font='bold 13px Inter'; cctx.textAlign='center';
+  cctx.fillStyle='rgba(239,68,68,0.9)'; cctx.fillText('🔴 Euclidean Distance',pw/2,26);
+  cctx.fillStyle='rgba(59,130,246,0.9)'; cctx.fillText('🔵 Cosine Distance',pw+pw/2,26);
+
+  const zoom=6, step=pw/(zoom*2);
+  const cx1=pw/2, cx2=pw+pw/2, cy=H/2+15;
+  const ori1={x:cx1,y:cy}, ori2={x:cx2,y:cy};
+  const pA1={x:cx1+pr.a.x*step,y:cy-pr.a.y*step}, pB1={x:cx1+pr.b.x*step,y:cy-pr.b.y*step};
+  const pA2={x:cx2+pr.a.x*step,y:cy-pr.a.y*step}, pB2={x:cx2+pr.b.x*step,y:cy-pr.b.y*step};
+
+  drawCompGrid(cctx,0,0,pw,H,cx1,cy,zoom,step);
+  drawCompGrid(cctx,pw,0,pw,H,cx2,cy,zoom,step);
+
+  // LEFT — Euclidean
+  cctx.save(); cctx.setLineDash([6,4]); cctx.strokeStyle='rgba(239,68,68,0.8)'; cctx.lineWidth=2;
+  cctx.beginPath(); cctx.moveTo(pA1.x,pA1.y); cctx.lineTo(pB1.x,pB1.y); cctx.stroke(); cctx.restore();
+  drawArrP(cctx,ori1.x,ori1.y,pA1.x,pA1.y,'#10b981',2.5,trunc(pr.la));
+  drawArrP(cctx,ori1.x,ori1.y,pB1.x,pB1.y,'#f59e0b',2.5,trunc(pr.lb));
+  drawDot2(cctx,pA1,'#10b981'); drawDot2(cctx,pB1,'#f59e0b');
+  const ed=eucDist(pr.a,pr.b);
+  cctx.fillStyle='#ef4444'; cctx.font='bold 12px JetBrains Mono'; cctx.textAlign='center';
+  cctx.fillText(`d = ${ed.toFixed(3)}`,(pA1.x+pB1.x)/2,(pA1.y+pB1.y)/2-12);
+
+  // RIGHT — Cosine
+  const cd=cosDist(pr.a,pr.b);
+  const angA=Math.atan2(-pr.a.y,pr.a.x), angB=Math.atan2(-pr.b.y,pr.b.x);
+  cctx.save(); cctx.strokeStyle='rgba(59,130,246,0.8)'; cctx.lineWidth=2.5; cctx.setLineDash([]);
+  if(Math.abs(angA-angB)>0.005){
+    cctx.beginPath(); cctx.arc(ori2.x,ori2.y,48,Math.min(angA,angB),Math.max(angA,angB)); cctx.stroke();
+  }
+  cctx.restore();
+  drawArrP(cctx,ori2.x,ori2.y,pA2.x,pA2.y,'#10b981',2.5,trunc(pr.la));
+  drawArrP(cctx,ori2.x,ori2.y,pB2.x,pB2.y,'#f59e0b',2.5,trunc(pr.lb));
+  drawDot2(cctx,pA2,'#10b981'); drawDot2(cctx,pB2,'#f59e0b');
+  const ang=angleDegFn(pr.a,pr.b);
+  cctx.fillStyle='#3b82f6'; cctx.font='bold 12px JetBrains Mono'; cctx.textAlign='center';
+  cctx.fillText(`angle=${ang.toFixed(1)}°  dist=${cd.toFixed(3)}  sim=${((1-cd)*100).toFixed(1)}%`,cx2,H-30);
+
+  cctx.font='bold 12px Inter'; cctx.textAlign='center';
+  cctx.fillStyle=ed>2?'rgba(239,68,68,0.9)':'rgba(16,185,129,0.9)';
+  cctx.fillText(ed>2?`Euclidean: FAR (${ed.toFixed(2)}) → MISS ❌`:`Euclidean: Close → HIT ✅`,pw/2,H-12);
+  cctx.fillStyle=cd<=0.25?'rgba(16,185,129,0.9)':'rgba(239,68,68,0.9)';
+  cctx.fillText(cd<=0.25?`Cosine: Same direction → HIT ✅`:`Cosine: Different direction → MISS ❌`,pw+pw/2,H-12);
+}
+
+function trunc(s){ return s.length>12?s.slice(0,12)+'..':s; }
+function drawDot2(ctx,p,color){ ctx.beginPath(); ctx.arc(p.x,p.y,5,0,Math.PI*2); ctx.fillStyle=color; ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.stroke(); }
+function drawCompGrid(ctx,x,y,w,h,cx,cy,zoom,step){
+  ctx.save(); ctx.beginPath(); ctx.rect(x,y,w,h); ctx.clip();
+  ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=1;
+  for(let i=-zoom;i<=zoom;i++){
+    ctx.beginPath(); ctx.moveTo(cx+i*step,y); ctx.lineTo(cx+i*step,y+h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x,cy+i*step); ctx.lineTo(x+w,cy+i*step); ctx.stroke();
+  }
+  ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(x,cy); ctx.lineTo(x+w,cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,y); ctx.lineTo(cx,y+h); ctx.stroke();
+  ctx.restore();
+}
+
+drawCompare(0);
+window.addEventListener('resize',()=>{ drawPlayground(); drawProblem(probPhase||0); drawCompare(selectedPair); });
+</script>
+</body>
+</html>
